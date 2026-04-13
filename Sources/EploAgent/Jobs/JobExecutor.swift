@@ -12,7 +12,7 @@ actor JobExecutor {
     }
 
     /// Executes a dispatched job, routing to the appropriate handler.
-    func execute(_ job: JobDispatchPayload, connection: AgentWebSocketClient) async throws {
+    func execute(_ job: JobDispatchPayload, connection: AgentWebSocketClient, config: AgentConfig) async throws {
         let jobId = job.jobId
         logger.info("Executing job \(jobId) (type: \(job.jobType.rawValue))")
 
@@ -24,41 +24,43 @@ actor JobExecutor {
                     logger: logger
                 )
 
+                let handlerResult: [String: AnyCodableValue]
+
                 switch job.jobType {
                 case .registerDevice:
                     let handler = DeviceRegistrationHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
 
                 case .regenerateProfile:
                     let handler = ProfileRegenerationHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
 
                 case .exportIPA:
-                    let handler = IPAExportHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    let handler = IPAExportHandler(logger: logger, config: config)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
 
                 case .fullDistribution:
-                    let handler = FullDistributionHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    let handler = FullDistributionHandler(logger: logger, config: config)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
 
                 case .syncCertificates:
                     let handler = CertificateSyncHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
 
                 case .syncDevices:
                     let handler = DeviceSyncHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
 
                 case .healthCheck:
                     let handler = HealthCheckHandler(logger: logger)
-                    try await handler.execute(job: job, progress: progressReporter)
+                    handlerResult = try await handler.execute(job: job, progress: progressReporter)
                 }
 
                 // Send success result.
                 let result = JobResultPayload(
                     jobId: jobId,
                     success: true,
-                    result: [:]
+                    result: handlerResult
                 )
                 try? await connection.send(.jobResult(result))
                 logger.info("Job \(jobId) completed successfully")

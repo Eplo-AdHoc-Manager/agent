@@ -6,23 +6,64 @@ import EploProtocol
 struct DeviceSyncHandler: Sendable {
     let logger: Logger
 
-    func execute(job: JobDispatchPayload, progress: ProgressReporter) async throws {
+    func execute(job: JobDispatchPayload, progress: ProgressReporter) async throws -> [String: AnyCodableValue] {
         await progress.report(phase: "fetching", progress: 0.0, message: "Fetching device list from Apple")
 
         logger.info("Syncing device list for job \(job.jobId)")
 
-        // TODO: Implement device list sync
-        // 1. Load the .p8 key from Keychain
-        // 2. Generate JWT for App Store Connect API
-        // 3. GET https://api.appstoreconnect.apple.com/v1/devices?filter[platform]=IOS
-        // 4. Parse pagination (follow next links)
-        // 5. Return the full device list with UDIDs, names, platform, status
+        let client = try AppStoreConnectClient.fromKeychain(logger: logger)
+
         try Task.checkCancellation()
 
-        await progress.report(phase: "processing", progress: 0.5, message: "Processing device list")
+        // Fetch all devices (paginated).
+        await progress.report(phase: "listing", progress: 0.2, message: "Listing registered devices")
 
-        // TODO: Compare with control plane's known devices and report differences
+        let devices = try await client.listDevices()
+        logger.info("Fetched \(devices.count) devices from App Store Connect")
+
+        try Task.checkCancellation()
+
+        await progress.report(phase: "processing", progress: 0.6, message: "Processing device list")
+
+        // Build the device list for the control plane.
+        var deviceEntries: [AnyCodableValue] = []
+        var enabledCount = 0
+        var disabledCount = 0
+
+        for device in devices {
+            let status = device.attributes.status ?? "UNKNOWN"
+            if status == "ENABLED" {
+                enabledCount += 1
+            } else {
+                disabledCount += 1
+            }
+
+            let entry: [String: AnyCodableValue] = [
+                "device_id": .string(device.id),
+                "name": .string(device.attributes.name ?? "Unknown"),
+                "udid": .string(device.attributes.udid ?? ""),
+                "platform": .string(device.attributes.platform ?? ""),
+                "status": .string(status),
+                "device_class": .string(device.attributes.deviceClass ?? ""),
+                "model": .string(device.attributes.model ?? ""),
+            ]
+
+            deviceEntries.append(.dictionary(entry))
+        }
+
+        await progress.report(
+            phase: "reporting",
+            progress: 0.9,
+            message: "Found \(devices.count) devices (\(enabledCount) enabled, \(disabledCount) disabled)"
+        )
 
         await progress.report(phase: "complete", progress: 1.0, message: "Device sync complete")
+
+        return [
+            "total_count": .int(devices.count),
+            "enabled_count": .int(enabledCount),
+            "disabled_count": .int(disabledCount),
+            "devices": .array(deviceEntries),
+        ]
     }
 }

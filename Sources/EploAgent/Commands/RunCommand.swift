@@ -47,7 +47,7 @@ struct RunCommand: AsyncParsableCommand {
                 await wsClient.setCurrentJob(payload.jobId)
 
                 do {
-                    try await jobExecutor.execute(payload, connection: wsClient)
+                    try await jobExecutor.execute(payload, connection: wsClient, config: config)
                 } catch {
                     logger.error("Job \(payload.jobId) failed: \(error)")
                 }

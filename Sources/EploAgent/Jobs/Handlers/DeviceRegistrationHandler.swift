@@ -6,7 +6,7 @@ import EploProtocol
 struct DeviceRegistrationHandler: Sendable {
     let logger: Logger
 
-    func execute(job: JobDispatchPayload, progress: ProgressReporter) async throws {
+    func execute(job: JobDispatchPayload, progress: ProgressReporter) async throws -> [String: AnyCodableValue] {
         await progress.report(phase: "preparing", progress: 0.0, message: "Preparing device registration")
 
         // Extract parameters from the job payload.
@@ -22,22 +22,56 @@ struct DeviceRegistrationHandler: Sendable {
             .flatMap { if case .string(let s) = $0 { return s } else { return nil } }
             ?? "IOS"
 
+        // Allow specifying a specific key ID, or use the first available.
+        let keyId = job.parameters["key_id"]
+            .flatMap { if case .string(let s) = $0 { return s } else { return nil } }
+
         logger.info("Registering device: \(deviceName) (\(udid)) platform=\(platform)")
+
+        await progress.report(phase: "authenticating", progress: 0.1, message: "Loading Apple API key")
+
+        let client: AppStoreConnectClient
+        if let keyId = keyId {
+            client = try AppStoreConnectClient.fromKeychain(keyId: keyId, logger: logger)
+        } else {
+            client = try AppStoreConnectClient.fromKeychain(logger: logger)
+        }
+
+        try Task.checkCancellation()
 
         await progress.report(phase: "registering", progress: 0.3, message: "Calling App Store Connect API")
 
-        // TODO: Implement actual App Store Connect API call
-        // 1. Load the .p8 key from Keychain using KeychainManager
-        // 2. Generate a JWT for App Store Connect API authentication
-        // 3. POST to https://api.appstoreconnect.apple.com/v1/devices
-        //    with body: { data: { type: "devices", attributes: { name, udid, platform } } }
-        // 4. Parse the response and return the registered device info
+        let device: ASCDevice
+        do {
+            device = try await client.registerDevice(name: deviceName, udid: udid, platform: platform)
+            logger.info("Device registered: \(device.id)")
+        } catch ASCClientError.deviceAlreadyRegistered(let existingDevice) {
+            // Device already exists -- treat as success.
+            logger.info("Device already registered: \(existingDevice.id)")
+            await progress.report(phase: "complete", progress: 1.0, message: "Device already registered")
+            return [
+                "device_id": .string(existingDevice.id),
+                "udid": .string(udid),
+                "name": .string(existingDevice.attributes.name ?? deviceName),
+                "platform": .string(existingDevice.attributes.platform ?? platform),
+                "status": .string(existingDevice.attributes.status ?? "ENABLED"),
+                "already_registered": .bool(true),
+            ]
+        }
+
         try Task.checkCancellation()
 
         await progress.report(phase: "verifying", progress: 0.8, message: "Verifying registration")
 
-        // TODO: Verify the device was registered successfully by querying the API
-
         await progress.report(phase: "complete", progress: 1.0, message: "Device registered successfully")
+
+        return [
+            "device_id": .string(device.id),
+            "udid": .string(udid),
+            "name": .string(device.attributes.name ?? deviceName),
+            "platform": .string(device.attributes.platform ?? platform),
+            "status": .string(device.attributes.status ?? "ENABLED"),
+            "already_registered": .bool(false),
+        ]
     }
 }

@@ -106,8 +106,10 @@ struct AppleKeyCommand: AsyncParsableCommand {
             let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? "~"
             let defaultHint = "AuthKey_\(keyId).p8"
 
+            // No UTI filter — .p8 files have no registered UTI on macOS, and
+            // extensions we care about are validated after the picker returns.
             let script = """
-            set theFile to choose file with prompt "Select \(defaultHint)" default location POSIX file "\(downloads)" of type {"com.apple.security.api-key"}
+            set theFile to choose file with prompt "Select \(defaultHint)" default location POSIX file "\(downloads)"
             return POSIX path of theFile
             """
 

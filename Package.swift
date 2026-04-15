@@ -20,6 +20,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
+        .package(url: "https://github.com/onevcat/Rainbow.git", from: "4.0.1"),
         .package(path: "../protocol-spec"),
     ],
     targets: [
@@ -32,6 +33,7 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "Rainbow", package: "Rainbow"),
                 .product(name: "EploProtocol", package: "protocol-spec"),
             ]
         ),

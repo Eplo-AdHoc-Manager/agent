@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import Logging
+import Rainbow
 
 struct PairCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -16,10 +17,10 @@ struct PairCommand: AsyncParsableCommand {
 
     func run() async throws {
         let logger = AgentLogger.bootstrap(label: "eplo.agent.pair")
-        logger.info("Starting pairing...")
+        Banner.print()
+        logger.info("Starting pairing")
 
-        // Validate server URL.
-        guard let _ = URL(string: server) else {
+        guard URL(string: server) != nil else {
             throw ValidationError("Invalid server URL: \(server)")
         }
 
@@ -30,20 +31,24 @@ struct PairCommand: AsyncParsableCommand {
             configuredAt: Date()
         )
 
-        // Test connectivity by opening a WebSocket connection.
-        print("Testing connection to \(server)...")
-
-        // Save the configuration. A full handshake test would require the server
-        // to be running — for now, just validate and persist.
         try config.save()
-        logger.info("Configuration saved to \(AgentConfig.configFileURL.path)")
+        logger.notice("Configuration saved")
 
-        print("")
-        print("Pairing successful!")
-        print("  Runner ID : \(config.runnerID)")
-        print("  Server    : \(config.serverURL)")
-        print("  Config    : \(AgentConfig.configFileURL.path)")
-        print("")
-        print("Start the agent with: eplo-agent run")
+        let success = "✓ Pairing successful".hex("34C759").bold
+        let label = { (s: String) in s.hex("9BA5B4") }
+        let value = { (s: String) in s.hex("E8ECEF") }
+
+        let out = """
+
+          \(success)
+
+            \(label("Runner ID  "))  \(value(config.runnerID.uuidString))
+            \(label("Server     "))  \(value(config.serverURL))
+            \(label("Config     "))  \(value(AgentConfig.configFileURL.path))
+
+          Start the agent with: \("eplo-agent run".hex("0A84FF").bold)
+
+        """
+        FileHandle.standardOutput.write(Data(out.utf8))
     }
 }

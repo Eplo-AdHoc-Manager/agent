@@ -2,6 +2,7 @@ import ArgumentParser
 import Foundation
 import Logging
 import NIO
+import Rainbow
 import EploProtocol
 #if canImport(Darwin)
 import Darwin
@@ -18,15 +19,17 @@ struct RunCommand: AsyncParsableCommand {
 
     func run() async throws {
         let logger = AgentLogger.bootstrap(label: "eplo.agent.run")
+        Banner.print()
 
         guard AgentConfig.exists else {
-            print("Error: Agent not configured. Run 'eplo-agent pair' first.")
+            let msg = "✗ Agent not configured. Run 'eplo-agent pair' first.".hex("FF3B30").bold
+            FileHandle.standardError.write(Data((msg + "\n").utf8))
             throw ExitCode.failure
         }
 
         let config = try AgentConfig.load()
-        logger.info("Loaded configuration for runner \(config.runnerID)")
-        logger.info("Connecting to \(config.serverURL)")
+        logger.info("Loaded configuration", metadata: ["runner_id": "\(config.runnerID)"])
+        logger.info("Connecting", metadata: ["server": "\(config.serverURL)"])
 
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 
@@ -78,8 +81,10 @@ struct RunCommand: AsyncParsableCommand {
         // Connect.
         await wsClient.connect()
 
-        print("Eplo Agent running (runner: \(config.runnerID))")
-        print("Press Ctrl+C to stop.")
+        let runningLine = "● running".hex("34C759").bold
+            + "  runner \(config.runnerID.uuidString.prefix(8))".hex("9BA5B4")
+            + "   press \("Ctrl+C".hex("E8ECEF").bold) to stop"
+        FileHandle.standardOutput.write(Data(("\n  " + runningLine + "\n\n").utf8))
 
         // Wait for termination signal using DispatchSource.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
